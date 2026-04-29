@@ -34,17 +34,24 @@ category: data-science
 | 子節點 | `GET` | `https://www.dsec.gov.mo/TimeSeriesApi/App/Indicatorv3/{indicatorID}` |
 | **時間序列數據** | `POST` | `https://www.dsec.gov.mo/TimeSeriesApi/App/IndicatorValue/LatestSameEndPeriodv3` |
 
-### 2. 獲取 Cookies
+### 2. 自動獲取 Cookies（無需手動！）
 
-從 DevTools **Application** → **Cookies** → `https://www.dsec.gov.mo` 複製以下 cookie：
-
+**方式一：一鍵自動（推薦）**
+```bash
+pip3 install playwright && playwright install chromium
+python3 fetch_dsec_timeseries.py --auto-cookies
 ```
-cs=...
-s=...
-.AspNetCore.Mvc.CookieTempDataProvider=...
-```
+第一次運行會自動啟動 headless Chrome 訪問 DSEC，自動抓取 cookies，無需任何手動操作。
 
-這些是 httpOnly session cookie，必須從瀏覽器取得。
+**方式二：单独運行 cookie 腳本**
+```bash
+pip3 install playwright && playwright install chromium
+python3 get_cookies.py
+```
+會生成 `cookies.json`，之後運行 `fetch_dsec_timeseries.py` 會自動讀取。
+
+**方式三：手動（不推薦）**
+從 Chrome DevTools → Application → Cookies 複製 cookies。
 
 ### 3. 呼叫時間序列數據 API
 
@@ -130,5 +137,8 @@ macau-dsec-scraper/
 ## 依賴
 
 ```bash
-pip3 install # 標準庫：urllib, sqlite3, json, time
+pip3 install playwright
+playwright install chromium  # 首次安裝需要
 ```
+
+Python 標準庫：`urllib`, `sqlite3`, `json`, `time`, `os`

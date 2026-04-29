@@ -6,12 +6,89 @@ DSEC Time Series Database Scraper
 import urllib.request, urllib.parse, json, sqlite3, time, os
 from datetime import datetime
 
-COOKIES = [
-    ("cs", "bNYnYhcgYDhYdqDNtV0iygZrtqyLkVA3HWELHU%2FtJJE%3D"),
-    (".AspNetCore.Mvc.CookieTempDataProvider", "CfDJ8AUGa5uEskVCmHp0fJLikFmsksSpFNi0ja3_tO9yGfdDAYCmrZEi8UddoI-JlO0xKM3KeDJdGpbPolHH_TSCzaDpvpDyMTaf8wKr7Iw2C-vls1MsLSONyjjmGLIiRuslocPAM8_njT3Kk03aoaLKn2EaSlQRNbQUFycU5avF9cd5"),
-    ("s", "CfDJ8AUGa5uEskVCmHp0fJLikFlIaaqgDhYpG%2F%2BLHcrSIRh71zojC0RzK1D4YGd5abO%2FdA%2Fi8gOkpKZpAGzNGEI4tKmb%2FktmzHfzcyhWzSBNZdxdEZObvrajP1XFACFI0i1VB11SKwCAqZ%2BOJiCW4lID0ROa8ihxvvDGFVHA3COrXhpg"),
-]
-COOKIE_HEADER = "; ".join(f"{k}={v}" for k, v in COOKIES)
+"""
+DSEC Time Series Database Scraper
+自動抓取澳門統計暨普查局時間序列數據庫完整歷史數據
+
+用法:
+  1. 首次運行自動獲取 cookies（需安裝 playwright）:
+       python3 fetch_dsec_timeseries.py --auto-cookies
+  2. 或先单独获取 cookies:
+       python3 get_cookies.py
+       python3 fetch_dsec_timeseries.py
+"""
+
+COOKIES = []
+COOKIE_HEADER = ""
+
+def load_cookies(path="cookies.json"):
+    global COOKIES, COOKIE_HEADER
+    if os.path.exists(path):
+        with open(path) as f:
+            cookie_dict = json.load(f)
+        COOKIES = list(cookie_dict.items())
+        COOKIE_HEADER = "; ".join(f"{k}={v}" for k, v in COOKIES)
+        return True
+    return False
+
+def auto_get_cookies():
+    """使用 Playwright 自動從瀏覽器獲取 cookies"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("需要先安裝 playwright: pip3 install playwright && playwright install chromium")
+        return False
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        ctx = browser.new_context()
+        page = ctx.new_page()
+        
+        page.goto("https://www.dsec.gov.mo/zh-MO/", timeout=20000)
+        page.wait_for_timeout(2000)
+        page.goto("https://www.dsec.gov.mo/ts/", timeout=20000)
+        page.wait_for_timeout(3000)
+        
+        cookies = ctx.cookies()
+        ctx.cookies()
+        
+        cookie_dict = {c['name']: c['value'] for c in cookies}
+        
+        # 測試是否有效
+        import urllib.request
+        hdr = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
+        req = urllib.request.Request("https://www.dsec.gov.mo/TimeSeriesApi/App/Indicatorv3")
+        req.add_header("Cookie", hdr)
+        req.add_header("User-Agent", "Mozilla/5.0")
+        
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+                if data.get('Value'):
+                    with open('cookies.json', 'w') as f:
+                        json.dump(cookie_dict, f)
+                    print(f"✓ cookies.json 已生成，共 {len(cookie_dict)} 個 cookies")
+                    load_cookies()
+                    return True
+        except Exception as e:
+            print(f"✗ cookies 無效: {e}")
+        
+        browser.close()
+        return False
+
+def ensure_cookies():
+    global COOKIE_HEADER
+    if not COOKIE_HEADER:
+        if '--auto-cookies' in sys.argv:
+            if not auto_get_cookies():
+                print("自動獲取 cookies 失敗，請先運行: python3 get_cookies.py")
+                sys.exit(1)
+        elif not load_cookies():
+            print("找不到 cookies.json，請先運行: python3 get_cookies.py")
+            sys.exit(1)
+
+import sys
+ensure_cookies()
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dsec_timeseries.db")
 
 def api_get(url):
